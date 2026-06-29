@@ -3,7 +3,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "claude-code">
 <!ENTITY author    "community">
-<!ENTITY version   "2025.06.29">
+<!ENTITY version   "2025.06.30">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/qubex22/unraid-plugins/refs/heads/main/claude-code/claude-code.plg">
 <!ENTITY pkgURL    "https://raw.githubusercontent.com/qubex22/unraid-plugins/refs/heads/main/claude-code">
 <!ENTITY plgPATH   "/boot/config/plugins/&name;">
@@ -15,6 +15,9 @@
 
 <CHANGES>
 ###&version;
+- Fix: WebGUI package had wrong tar paths so .page/action.php landed at filesystem root instead of
+  /usr/local/emhttp/plugins/claude-code/ — page never appeared in Settings. Rebuilt with correct paths.
+###2025.06.29
 - Fix: blank page when clicking Install — actions now run in the background with a live progress panel
 - Fix: config page now nests under Settings → Utilities (clickable link) instead of appearing directly
 - Add: debug log capturing every PHP error/exception and action lifecycle event
