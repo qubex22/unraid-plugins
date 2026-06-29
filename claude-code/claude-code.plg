@@ -3,7 +3,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "claude-code">
 <!ENTITY author    "community">
-<!ENTITY version   "2025.06.24">
+<!ENTITY version   "2025.06.29">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/qubex22/unraid-plugins/refs/heads/main/claude-code/claude-code.plg">
 <!ENTITY pkgURL    "https://raw.githubusercontent.com/qubex22/unraid-plugins/refs/heads/main/claude-code">
 <!ENTITY plgPATH   "/boot/config/plugins/&name;">
@@ -15,10 +15,12 @@
 
 <CHANGES>
 ###&version;
-- Initial release
-- Installs Claude Code with full persistence across reboots
-- WebGUI page under Settings with settings.json editor, MCP config, env var reference, error log
-- Stores binary and config on /boot (USB), restores symlinks on every boot via /boot/config/go
+- Fix: blank page when clicking Install — actions now run in the background with a live progress panel
+- Fix: config page now nests under Settings → Utilities (clickable link) instead of appearing directly
+- Add: debug log capturing every PHP error/exception and action lifecycle event
+- Add: error handling, exit-code capture, script-existence checks, cancel button
+- Harden install/update scripts with pipefail + clearer error logging
+- Initial release (2025.06.24): installs Claude Code with full persistence across reboots
 </CHANGES>
 
 <!-- Download WebGUI package -->
@@ -76,27 +78,30 @@ esac
 <FILE Name="&plgPATH;/install-claude.sh" Mode="0755">
 <INLINE>
 #!/bin/bash
+set -o pipefail
 PERSIST="&plgPATH;/persist"
 LOCAL_BIN="/root/.local/bin"
 LOCAL_SHARE="/root/.local/share/claude"
 CLAUDE_CFG="/root/.claude"
 
 log() { logger -t "claude-code" "$*"; echo "[claude-code] $*"; }
+die() { log "ERROR: $*"; exit 1; }
 
 [ -f "$PERSIST/bin/claude" ] &amp;&amp; log "Already installed." &amp;&amp; exit 0
 
 log "Creating persistent directories on /boot..."
-mkdir -p "$PERSIST/bin" "$PERSIST/share" "$PERSIST/cfg"
-mkdir -p "$LOCAL_BIN" "/root/.local/share"
+mkdir -p "$PERSIST/bin" "$PERSIST/share" "$PERSIST/cfg" || die "mkdir persist failed"
+mkdir -p "$LOCAL_BIN" "/root/.local/share" || die "mkdir local failed"
 
 log "Downloading Claude Code via official installer..."
 export PATH="/root/.local/bin:$PATH"
-curl -fsSL https://claude.ai/install.sh | bash
-RC=$?
-[ $RC -ne 0 ] &amp;&amp; log "Install failed (exit $RC)" &amp;&amp; exit 1
+if ! curl -fsSL https://claude.ai/install.sh | bash; then
+  die "Official installer failed (curl exit $?). Check network / claude.ai reachability."
+fi
+[ -f "$LOCAL_BIN/claude" ] || die "Installer finished but $LOCAL_BIN/claude not found."
 
 log "Moving files to persistent storage on /boot..."
-[ -f "$LOCAL_BIN/claude" ] &amp;&amp; cp -a "$LOCAL_BIN/claude" "$PERSIST/bin/claude" &amp;&amp; chmod +x "$PERSIST/bin/claude"
+cp -a "$LOCAL_BIN/claude" "$PERSIST/bin/claude" &amp;&amp; chmod +x "$PERSIST/bin/claude" || die "copying binary failed"
 if [ -d "$LOCAL_SHARE" ] &amp;&amp; [ ! -L "$LOCAL_SHARE" ]; then
   cp -a "$LOCAL_SHARE/." "$PERSIST/share/" 2>/dev/null; rm -rf "$LOCAL_SHARE"
 fi
@@ -104,7 +109,7 @@ if [ -d "$CLAUDE_CFG" ] &amp;&amp; [ ! -L "$CLAUDE_CFG" ]; then
   cp -a "$CLAUDE_CFG/." "$PERSIST/cfg/" 2>/dev/null; rm -rf "$CLAUDE_CFG"
 fi
 
-bash "&plgPATH;/rc.claude-code" start
+bash "&plgPATH;/rc.claude-code" start || die "rc.claude-code start failed"
 log "Install complete. Open a terminal and run: claude"
 </INLINE>
 </FILE>
@@ -146,7 +151,7 @@ bash "&plgPATH;/rc.claude-code" start
 echo ""
 echo "-----------------------------------------------------------"
 echo " claude-code plugin installed successfully."
-echo " Go to Settings > Claude Code to install Claude Code."
+echo " Go to Settings -> Utilities -> Claude Code to install Claude Code."
 echo "-----------------------------------------------------------"
 </INLINE>
 </FILE>
