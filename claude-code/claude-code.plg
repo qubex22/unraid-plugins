@@ -4,8 +4,8 @@
 <!ENTITY name      "claude-code">
 <!ENTITY author    "community">
 <!ENTITY version   "2025.06.24">
-<!ENTITY pluginURL "https://raw.githubusercontent.com/YOUR_USER/unraid-claude-code/main/claude-code.plg">
-<!ENTITY pkgURL    "https://raw.githubusercontent.com/YOUR_USER/unraid-claude-code/main/archive">
+<!ENTITY pluginURL "https://raw.githubusercontent.com/qubex22/unraid-plugins/claude-code/main/claude-code.plg">
+<!ENTITY pkgURL    "https://raw.githubusercontent.com/qubex22/unraid-plugins/claude-code/main/archive">
 <!ENTITY plgPATH   "/boot/config/plugins/&name;">
 <!ENTITY plgNAME   "&name;-&version;-x86_64-1">
 <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
