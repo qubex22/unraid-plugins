@@ -3,7 +3,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "claude-code">
 <!ENTITY author    "community">
-<!ENTITY version   "2025.06.30">
+<!ENTITY version   "2025.06.30.1">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/qubex22/unraid-plugins/refs/heads/main/claude-code/claude-code.plg">
 <!ENTITY pkgURL    "https://raw.githubusercontent.com/qubex22/unraid-plugins/refs/heads/main/claude-code">
 <!ENTITY plgPATH   "/boot/config/plugins/&name;">
@@ -15,6 +15,12 @@
 
 <CHANGES>
 ###&version;
+- Fix: Enhanced error handling for 504 Gateway Timeout errors
+- Fix: Added automatic error detection and user guidance in WebUI
+- Fix: Added documentation and troubleshooting guides
+- Fix: Improved timeout handling and error logging in action.php
+- Note: If you see errors when clicking buttons, follow the on-screen instructions
+###2025.06.30
 - Fix: WebGUI package had wrong tar paths so .page/action.php landed at filesystem root instead of
   /usr/local/emhttp/plugins/claude-code/ — page never appeared in Settings. Rebuilt with correct paths.
 ###2025.06.29
@@ -47,15 +53,15 @@ CLAUDE_CFG="/root/.claude"
 log() { logger -t "claude-code" "$*"; }
 
 start() {
-  [ ! -f "$PERSIST/bin/claude" ] &amp;&amp; log "Not installed. Use Settings/ClaudeCode to install." &amp;&amp; return 0
+  [ ! -f "$PERSIST/bin/claude" ] && log "Not installed. Use Settings/ClaudeCode to install." && return 0
   log "Restoring symlinks from $PERSIST..."
   mkdir -p "$LOCAL_BIN" "/root/.local/share"
   ln -sf "$PERSIST/bin/claude" "$LOCAL_BIN/claude"
   chmod +x "$PERSIST/bin/claude"
-  if [ -d "$PERSIST/share" ] &amp;&amp; [ ! -L "$LOCAL_SHARE" ]; then
+  if [ -d "$PERSIST/share" ] && [ ! -L "$LOCAL_SHARE" ]; then
     rm -rf "$LOCAL_SHARE"; ln -sf "$PERSIST/share" "$LOCAL_SHARE"
   fi
-  if [ -d "$PERSIST/cfg" ] &amp;&amp; [ ! -L "$CLAUDE_CFG" ]; then
+  if [ -d "$PERSIST/cfg" ] && [ ! -L "$CLAUDE_CFG" ]; then
     rm -rf "$CLAUDE_CFG"; ln -sf "$PERSIST/cfg" "$CLAUDE_CFG"
   fi
   grep -q ".local/bin" /root/.bashrc 2>/dev/null || echo 'export PATH="$HOME/.local/bin:$PATH"' >> /root/.bashrc
@@ -64,9 +70,9 @@ start() {
 
 stop() {
   log "Removing symlinks..."
-  [ -L "$LOCAL_BIN/claude" ] &amp;&amp; rm -f "$LOCAL_BIN/claude"
-  [ -L "$LOCAL_SHARE" ]      &amp;&amp; rm -f "$LOCAL_SHARE"
-  [ -L "$CLAUDE_CFG" ]       &amp;&amp; rm -f "$CLAUDE_CFG"
+  [ -L "$LOCAL_BIN/claude" ] && rm -f "$LOCAL_BIN/claude"
+  [ -L "$LOCAL_SHARE" ]      && rm -f "$LOCAL_SHARE"
+  [ -L "$CLAUDE_CFG" ]       && rm -f "$CLAUDE_CFG"
 }
 
 case "$1" in
@@ -90,7 +96,7 @@ CLAUDE_CFG="/root/.claude"
 log() { logger -t "claude-code" "$*"; echo "[claude-code] $*"; }
 die() { log "ERROR: $*"; exit 1; }
 
-[ -f "$PERSIST/bin/claude" ] &amp;&amp; log "Already installed." &amp;&amp; exit 0
+[ -f "$PERSIST/bin/claude" ] && log "Already installed." && exit 0
 
 log "Creating persistent directories on /boot..."
 mkdir -p "$PERSIST/bin" "$PERSIST/share" "$PERSIST/cfg" || die "mkdir persist failed"
@@ -104,11 +110,11 @@ fi
 [ -f "$LOCAL_BIN/claude" ] || die "Installer finished but $LOCAL_BIN/claude not found."
 
 log "Moving files to persistent storage on /boot..."
-cp -a "$LOCAL_BIN/claude" "$PERSIST/bin/claude" &amp;&amp; chmod +x "$PERSIST/bin/claude" || die "copying binary failed"
-if [ -d "$LOCAL_SHARE" ] &amp;&amp; [ ! -L "$LOCAL_SHARE" ]; then
+cp -a "$LOCAL_BIN/claude" "$PERSIST/bin/claude" && chmod +x "$PERSIST/bin/claude" || die "copying binary failed"
+if [ -d "$LOCAL_SHARE" ] && [ ! -L "$LOCAL_SHARE" ]; then
   cp -a "$LOCAL_SHARE/." "$PERSIST/share/" 2>/dev/null; rm -rf "$LOCAL_SHARE"
 fi
-if [ -d "$CLAUDE_CFG" ] &amp;&amp; [ ! -L "$CLAUDE_CFG" ]; then
+if [ -d "$CLAUDE_CFG" ] && [ ! -L "$CLAUDE_CFG" ]; then
   cp -a "$CLAUDE_CFG/." "$PERSIST/cfg/" 2>/dev/null; rm -rf "$CLAUDE_CFG"
 fi
 
