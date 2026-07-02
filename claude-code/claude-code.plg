@@ -55,26 +55,26 @@ CLAUDE_CFG="/root/.claude"
 log() { logger -t "claude-code" "$*"; }
 
 start() {
-  [ ! -f "$PERSIST/bin/claude" ] && log "Not installed. Use Settings/ClaudeCode to install." && return 0
+  [ ! -f "$PERSIST/bin/claude" ] &amp;&amp; log "Not installed. Use Settings/ClaudeCode to install." &amp;&amp; return 0
   log "Restoring symlinks from $PERSIST..."
   mkdir -p "$LOCAL_BIN" "/root/.local/share"
   ln -sf "$PERSIST/bin/claude" "$LOCAL_BIN/claude"
   chmod +x "$PERSIST/bin/claude"
-  if [ -d "$PERSIST/share" ] && [ ! -L "$LOCAL_SHARE" ]; then
+  if [ -d "$PERSIST/share" ] &amp;&amp; [ ! -L "$LOCAL_SHARE" ]; then
     rm -rf "$LOCAL_SHARE"; ln -sf "$PERSIST/share" "$LOCAL_SHARE"
   fi
-  if [ -d "$PERSIST/cfg" ] && [ ! -L "$CLAUDE_CFG" ]; then
+  if [ -d "$PERSIST/cfg" ] &amp;&amp; [ ! -L "$CLAUDE_CFG" ]; then
     rm -rf "$CLAUDE_CFG"; ln -sf "$PERSIST/cfg" "$CLAUDE_CFG"
   fi
-  grep -q ".local/bin" /root/.bashrc 2>/dev/null || echo 'export PATH="$HOME/.local/bin:$PATH"' >> /root/.bashrc
+  grep -q ".local/bin" /root/.bashrc 2&gt;/dev/null || echo 'export PATH="$HOME/.local/bin:$PATH"' &gt;&gt; /root/.bashrc
   log "Claude Code ready."
 }
 
 stop() {
   log "Removing symlinks..."
-  [ -L "$LOCAL_BIN/claude" ] && rm -f "$LOCAL_BIN/claude"
-  [ -L "$LOCAL_SHARE" ]      && rm -f "$LOCAL_SHARE"
-  [ -L "$CLAUDE_CFG" ]       && rm -f "$CLAUDE_CFG"
+  [ -L "$LOCAL_BIN/claude" ] &amp;&amp; rm -f "$LOCAL_BIN/claude"
+  [ -L "$LOCAL_SHARE" ]      &amp;&amp; rm -f "$LOCAL_SHARE"
+  [ -L "$CLAUDE_CFG" ]       &amp;&amp; rm -f "$CLAUDE_CFG"
 }
 
 case "$1" in
@@ -98,7 +98,7 @@ CLAUDE_CFG="/root/.claude"
 log() { logger -t "claude-code" "$*"; echo "[claude-code] $*"; }
 die() { log "ERROR: $*"; exit 1; }
 
-[ -f "$PERSIST/bin/claude" ] && log "Already installed." && exit 0
+[ -f "$PERSIST/bin/claude" ] &amp;&amp; log "Already installed." &amp;&amp; exit 0
 
 log "Creating persistent directories on /boot..."
 mkdir -p "$PERSIST/bin" "$PERSIST/share" "$PERSIST/cfg" || die "mkdir persist failed"
@@ -112,12 +112,12 @@ fi
 [ -f "$LOCAL_BIN/claude" ] || die "Installer finished but $LOCAL_BIN/claude not found."
 
 log "Moving files to persistent storage on /boot..."
-cp -a "$LOCAL_BIN/claude" "$PERSIST/bin/claude" && chmod +x "$PERSIST/bin/claude" || die "copying binary failed"
-if [ -d "$LOCAL_SHARE" ] && [ ! -L "$LOCAL_SHARE" ]; then
-  cp -a "$LOCAL_SHARE/." "$PERSIST/share/" 2>/dev/null; rm -rf "$LOCAL_SHARE"
+cp -a "$LOCAL_BIN/claude" "$PERSIST/bin/claude" &amp;&amp; chmod +x "$PERSIST/bin/claude" || die "copying binary failed"
+if [ -d "$LOCAL_SHARE" ] &amp;&amp; [ ! -L "$LOCAL_SHARE" ]; then
+  cp -a "$LOCAL_SHARE/." "$PERSIST/share/" 2&gt;/dev/null; rm -rf "$LOCAL_SHARE"
 fi
-if [ -d "$CLAUDE_CFG" ] && [ ! -L "$CLAUDE_CFG" ]; then
-  cp -a "$CLAUDE_CFG/." "$PERSIST/cfg/" 2>/dev/null; rm -rf "$CLAUDE_CFG"
+if [ -d "$CLAUDE_CFG" ] &amp;&amp; [ ! -L "$CLAUDE_CFG" ]; then
+  cp -a "$CLAUDE_CFG/." "$PERSIST/cfg/" 2&gt;/dev/null; rm -rf "$CLAUDE_CFG"
 fi
 
 bash "&plgPATH;/rc.claude-code" start || die "rc.claude-code start failed"
@@ -133,7 +133,7 @@ log() { logger -t "claude-code" "$*"; echo "[claude-code] $*"; }
 log "Stopping and removing Claude Code..."
 bash "&plgPATH;/rc.claude-code" stop
 rm -rf "&plgPATH;/persist"
-sed -i '/rc.claude-code/d' /boot/config/go 2>/dev/null
+sed -i '/rc.claude-code/d' /boot/config/go 2&gt;/dev/null
 log "Claude Code removed."
 </INLINE>
 </FILE>
@@ -152,17 +152,17 @@ fi
 upgradepkg --install-new "&plgPATH;/&plgNAME;.txz"
 
 GO="/boot/config/go"
-grep -q "rc.claude-code" "$GO" 2>/dev/null || {
-  echo "" >> "$GO"
-  echo "# Claude Code - restore symlinks on boot" >> "$GO"
-  echo "bash /boot/config/plugins/claude-code/rc.claude-code start" >> "$GO"
+grep -q "rc.claude-code" "$GO" 2&gt;/dev/null || {
+  echo "" &gt;&gt; "$GO"
+  echo "# Claude Code - restore symlinks on boot" &gt;&gt; "$GO"
+  echo "bash /boot/config/plugins/claude-code/rc.claude-code start" &gt;&gt; "$GO"
 }
 
 bash "&plgPATH;/rc.claude-code" start
 echo ""
 echo "-----------------------------------------------------------"
 echo " claude-code plugin installed successfully."
-echo " Go to Settings -> Utilities -> Claude Code to install Claude Code."
+echo " Go to Settings -&gt; Utilities -&gt; Claude Code to install Claude Code."
 echo "-----------------------------------------------------------"
 </INLINE>
 </FILE>
@@ -170,11 +170,11 @@ echo "-----------------------------------------------------------"
 <!-- REMOVE -->
 <FILE Run="/bin/bash" Method="remove">
 <INLINE>
-bash &plgPATH;/uninstall-claude.sh
-removepkg &plgPATH;/&plgNAME;.txz 2>/dev/null
-rm -rf &emhttp;
-rm -f &plgPATH;/&plgNAME;.txz &plgPATH;/&plgNAME;.md5
-rm -f &plgPATH;/rc.claude-code &plgPATH;/install-claude.sh &plgPATH;/uninstall-claude.sh
+bash &amp;plgPATH;/uninstall-claude.sh
+removepkg &amp;plgPATH;/&amp;plgNAME;.txz 2&gt;/dev/null
+rm -rf &amp;emhttp;
+rm -f &amp;plgPATH;/&amp;plgNAME;.txz &amp;plgPATH;/&amp;plgNAME;.md5
+rm -f &amp;plgPATH;/rc.claude-code &amp;plgPATH;/install-claude.sh &amp;plgPATH;/uninstall-claude.sh
 echo "claude-code: removed."
 </INLINE>
 </FILE>
