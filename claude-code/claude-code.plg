@@ -3,7 +3,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "claude-code">
 <!ENTITY author    "community">
-<!ENTITY version   "2025.06.30.1">
+<!ENTITY version   "2025.06.30.2">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/qubex22/unraid-plugins/refs/heads/main/claude-code/claude-code.plg">
 <!ENTITY pkgURL    "https://raw.githubusercontent.com/qubex22/unraid-plugins/refs/heads/main/claude-code">
 <!ENTITY plgPATH   "/boot/config/plugins/&name;">
@@ -15,12 +15,14 @@
 
 <CHANGES>
 ###&version;
+- Fix: Added CSRF token validation to prevent "missing csrf_token" errors
+- Fix: Updated all AJAX calls in ClaudeCode.page to include csrf_token
+- Fix: Smart CSRF validation in action.php (exempts progress/get_log for compatibility)
 - Fix: Enhanced error handling for 504 Gateway Timeout errors
 - Fix: Added automatic error detection and user guidance in WebUI
 - Fix: Added documentation and troubleshooting guides
 - Fix: Improved timeout handling and error logging in action.php
-- Note: If you see errors when clicking buttons, follow the on-screen instructions
-###2025.06.30
+###2025.06.30.1
 - Fix: WebGUI package had wrong tar paths so .page/action.php landed at filesystem root instead of
   /usr/local/emhttp/plugins/claude-code/ — page never appeared in Settings. Rebuilt with correct paths.
 ###2025.06.29
