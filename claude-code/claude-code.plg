@@ -142,7 +142,7 @@ log "Claude Code removed."
 <FILE Run="/bin/bash">
 <INLINE>
 SUM1=$(md5sum "&plgPATH;/&plgNAME;.txz" | awk '{print $1}')
-SUM2=$(cat "&plgPATH;/&plgNAME;.md5")
+SUM2=$(cat "&plgPATH;/&plgNAME;.md5" | awk '{print $1}')
 if [ "$SUM1" != "$SUM2" ]; then
   echo "ERROR: Package checksum mismatch - aborting"
   rm -f "&plgPATH;/&plgNAME;.txz" "&plgPATH;/&plgNAME;.md5"
