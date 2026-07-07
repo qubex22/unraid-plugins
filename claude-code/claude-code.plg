@@ -58,11 +58,14 @@ start() {
   [ ! -f "$PERSIST/bin/claude" ] &amp;&amp; log "Not installed. Use Settings/ClaudeCode to install." &amp;&amp; return 0
   log "Restoring symlinks from $PERSIST..."
   mkdir -p "$LOCAL_BIN" "/root/.local/share"
+
+  # Fix symlinks by removing them first if they exist
+  rm -f "$LOCAL_BIN/claude" "$LOCAL_SHARE"
+
   ln -sf "$PERSIST/bin/claude" "$LOCAL_BIN/claude"
+  ln -sf "$PERSIST/share" "$LOCAL_SHARE"
+
   chmod +x "$PERSIST/bin/claude"
-  if [ -d "$PERSIST/share" ] &amp;&amp; [ ! -L "$LOCAL_SHARE" ]; then
-    rm -rf "$LOCAL_SHARE"; ln -sf "$PERSIST/share" "$LOCAL_SHARE"
-  fi
   if [ -d "$PERSIST/cfg" ] &amp;&amp; [ ! -L "$CLAUDE_CFG" ]; then
     rm -rf "$CLAUDE_CFG"; ln -sf "$PERSIST/cfg" "$CLAUDE_CFG"
   fi
