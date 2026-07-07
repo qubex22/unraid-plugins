@@ -555,13 +555,13 @@ function cancelAction() {
 
 function showNginxFix(e) {
   e.preventDefault();
-  var html = "<div style=\\"background:#1a1a1a;padding:16px;border-radius:6px;border:1px solid #444;font-size:13px;color:#eee;margin-top:16px">
+  var html = `<div style="background:#1a1a1a;padding:16px;border-radius:6px;border:1px solid #444;font-size:13px;color:#eee;margin-top:16px">
 <h3 style="margin:0 0 10px;color:#ff6b6b">Fix Required: nginx Configuration</h3>
 <p><b>Issue:</b> Unraid global auth middleware times out for this plugin action endpoint.</p>
 <p><b>Solution:</b> Run these commands as root in a terminal:</p>
 <pre style="background:#000;padding:10px;border-radius:4px;font-family:monospace;font-size:12px;margin:8px 0">
 # Add nginx location configuration to bypass auth_request
-cat >> /etc/nginx/conf.d/locations.conf << EOF
+cat >> /etc/nginx/conf.d/locations.conf <<'EOF'
 # Claude Code plugin nginx configuration
 location ^~ /plugins/claude-code/action.php {
   auth_request off;
@@ -575,7 +575,7 @@ EOF
 nginx -t && nginx -s reload</pre>
 <p><b>Note:</b> This modifies a core Unraid file. The change is safe but may be overwritten during Unraid updates.</p>
 <p><b>Alternative:</b> Use the command line: <code>bash /boot/config/plugins/claude-code/install-claude.sh</code></p>
-</div>";
+</div>`;
   var existing = document.getElementById("nginx-instructions");
   if (existing) {
     existing.style.display = existing.style.display === "none" ? "block" : "none";
