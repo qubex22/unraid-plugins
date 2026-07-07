@@ -376,6 +376,7 @@ endif; ?>
 </div>
 
 <script>
+console.log('Claude Code page script loading...');
 var CC = {
   pollTimer: null,
   busy: false,
@@ -383,6 +384,7 @@ var CC = {
 };
 
 function ccTab(el, id) {
+  console.log('ccTab called with:', id);
   document.querySelectorAll('.cc-tab').forEach(function(t){ t.classList.remove('active'); });
   document.querySelectorAll('.cc-panel').forEach(function(p){ p.classList.remove('active'); });
   el.classList.add('active');
@@ -439,8 +441,14 @@ function ajaxSave(action, editorId, errId, savedId) {
     });
 }
 
-function saveSettings() { ajaxSave('save_settings','settings-editor','settings-error','settings-saved'); }
-function saveMcp()      { ajaxSave('save_mcp','mcp-editor','mcp-error','mcp-saved'); }
+function saveSettings() {
+  console.log('saveSettings called');
+  ajaxSave('save_settings','settings-editor','settings-error','settings-saved');
+}
+function saveMcp() {
+  console.log('saveMcp called');
+  ajaxSave('save_mcp','mcp-editor','mcp-error','mcp-saved');
+}
 
 function resetSettings() {
   if (!confirm('Reset settings.json to defaults?')) return;
@@ -589,4 +597,5 @@ function refreshLog() {
       var g = document.getElementById('log-debug');  g.textContent = d.debug  || '(empty)';     g.scrollTop = g.scrollHeight;
     });
 }
+console.log('Claude Code page script loaded successfully');
 </script>
