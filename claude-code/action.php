@@ -75,11 +75,12 @@ set_exception_handler(function ($e) {
 /* --------------------------------------------------------------------------
  * Dispatch
  * ------------------------------------------------------------------------ */
-$action = $_POST['action'] ?? $_GET['action'] ?? '';
+// Accept parameters from both GET and POST sources
+$action = $_GET['action'] ?? $_POST['action'] ?? '';
 cc_debug("action.php invoked: action=" . ($action ?: '(none)') .
-         " name=" . ($_POST['name'] ?? ''));
+         " name=" . ($_GET['name'] ?? $_POST['name'] ?? ''));
 
-// CSRF validation for POST requests
+// CSRF validation for POST requests (GET requests are exempt for compatibility)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     global $var;
     $submitted_csrf = $_POST['csrf_token'] ?? '';
@@ -106,7 +107,7 @@ try {
 
         /* ---- settings.json ---- */
         case 'save_settings': {
-            $content = $_POST['content'] ?? '';
+            $content = $_GET['content'] ?? $_POST['content'] ?? '';
             json_decode($content);
             if (json_last_error() !== JSON_ERROR_NONE) {
                 cc_fail('Invalid JSON: ' . json_last_error_msg(), 400);
@@ -129,7 +130,7 @@ try {
 
         /* ---- mcp.json ---- */
         case 'save_mcp': {
-            $content = $_POST['content'] ?? '';
+            $content = $_GET['content'] ?? $_POST['content'] ?? '';
             json_decode($content);
             if (json_last_error() !== JSON_ERROR_NONE) {
                 cc_fail('Invalid JSON: ' . json_last_error_msg(), 400);
@@ -167,7 +168,7 @@ try {
 
         /* ---- start a background action ---- */
         case 'start': {
-            $name = $_POST['name'] ?? '';
+            $name = $_GET['name'] ?? $_POST['name'] ?? '';
             $allowed = ['install', 'restore', 'update', 'uninstall'];
             if (!in_array($name, $allowed, true)) {
                 cc_fail("Invalid action name: $name", 400);

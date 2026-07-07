@@ -416,13 +416,13 @@ function ajaxSave(action, editorId, errId, savedId) {
   }
   err.style.display = 'none';
   el.classList.remove('error');
-  var fd = new FormData();
-  fd.append('action', action);
+  var params = new URLSearchParams();
+  params.append('action', action);
   if (CC.csrfToken && CC.csrfToken !== '') {
-    fd.append('csrf_token', CC.csrfToken);
+    params.append('csrf_token', CC.csrfToken);
   }
-  fd.append('content', el.value);
-  fetch('/plugins/claude-code/action.php', { method:'POST', body:fd })
+  params.append('content', el.value);
+  fetch('/plugins/claude-code/action.php?' + params.toString(), { method:'GET' })
     .then(function(r){ return r.json(); })
     .then(function(d){
       if (d.ok) {
@@ -470,13 +470,13 @@ function runAction(name, confirmMsg) {
   setButtonsDisabled(true);
   showProgress(name.charAt(0).toUpperCase() + name.slice(1) + '…', 'running');
   document.getElementById('cc-prog-log').textContent = '(starting…)';
-  var fd = new FormData();
-  fd.append('action', 'start');
+  var params = new URLSearchParams();
+  params.append('action', 'start');
   if (CC.csrfToken && CC.csrfToken !== '') {
-    fd.append('csrf_token', CC.csrfToken);
+    params.append('csrf_token', CC.csrfToken);
   }
-  fd.append('name', name);
-  fetch('/plugins/claude-code/action.php', { method:'POST', body:fd })
+  params.append('name', name);
+  fetch('/plugins/claude-code/action.php?' + params.toString(), { method:'GET' })
     .then(function(r){ return r.json(); })
     .then(function(d){
       if (!d.ok) {
@@ -501,12 +501,12 @@ function runAction(name, confirmMsg) {
 
 function pollProgress() {
   clearTimeout(CC.pollTimer);
-  var fd = new FormData();
-  fd.append('action', 'progress');
+  var params = new URLSearchParams();
+  params.append('action', 'progress');
   if (CC.csrfToken && CC.csrfToken !== '') {
-    fd.append('csrf_token', CC.csrfToken);
+    params.append('csrf_token', CC.csrfToken);
   }
-  fetch('/plugins/claude-code/action.php', { method:'POST', body:fd })
+  fetch('/plugins/claude-code/action.php?' + params.toString(), { method:'GET' })
     .then(function(r){ return r.json(); })
     .then(function(d){
       var log = document.getElementById('cc-prog-log');
@@ -530,12 +530,12 @@ function pollProgress() {
 }
 
 function cancelAction() {
-  var fd = new FormData();
-  fd.append('action', 'cancel');
+  var params = new URLSearchParams();
+  params.append('action', 'cancel');
   if (CC.csrfToken && CC.csrfToken !== '') {
-    fd.append('csrf_token', CC.csrfToken);
+    params.append('csrf_token', CC.csrfToken);
   }
-  fetch('/plugins/claude-code/action.php', { method:'POST', body:fd })
+  fetch('/plugins/claude-code/action.php?' + params.toString(), { method:'GET' })
     .then(function(r){ return r.json(); })
     .then(function(){
       clearTimeout(CC.pollTimer);
@@ -579,9 +579,9 @@ nginx -t && nginx -s reload</pre>
   }
 }
 function refreshLog() {
-  var fd = new FormData();
-  fd.append('action', 'get_log');
-  fetch('/plugins/claude-code/action.php', { method:'POST', body:fd })
+  var params = new URLSearchParams();
+  params.append('action', 'get_log');
+  fetch('/plugins/claude-code/action.php?' + params.toString(), { method:'GET' })
     .then(function(r){ return r.json(); })
     .then(function(d){
       var a = document.getElementById('log-action'); a.textContent = d.action || '(no action run yet)'; a.scrollTop = a.scrollHeight;
