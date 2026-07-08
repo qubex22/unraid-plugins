@@ -31,6 +31,12 @@
 - Add: update-claude.sh now shipped by the .plg (was orphaned) and re-persists
   the new version after `claude update`/installer fallback.
 - Fix: uninstall removes stale go lines and the user-scope config link.
+- Fix: SSH sessions didn't see `claude` command. .bash_profile (the login-shell
+  startup file) never sourced .bashrc, so the PATH addition was invisible to SSH.
+  rc.claude-code now ensures .bash_profile sources .bashrc.
+- Fix: .bashrc PATH guard used `.local/bin` regex — "." matches any char, so it
+  misfired on /usr/local/bin in the default PATH, causing 18 duplicate lines.
+  Now uses a precise fixed-string match (grep -Fxq).
 ###2025.06.30.2
 - Fix: Added CSRF token validation to prevent "missing csrf_token" errors
 - Fix: Updated all AJAX calls in ClaudeCode.page to include csrf_token
@@ -100,7 +106,19 @@ start() {
   if [ -f "$PERSIST/cfg/.claude.json" ]; then
     rm -f "$USER_JSON"; ln -sfn "$PERSIST/cfg/.claude.json" "$USER_JSON"
   fi
-  grep -q ".local/bin" /root/.bashrc 2&gt;/dev/null || echo 'export PATH="$HOME/.local/bin:$PATH"' &gt;&gt; /root/.bashrc
+  # Add ~/.local/bin to PATH in .bashrc. Use a precise fixed-string match so
+  # the guard does not misfire on /usr/local/bin (".local/bin" as regex matches
+  # that too — "." is any char).
+  BASH_RC="/root/.bashrc"
+  PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
+  grep -Fxq "$PATH_LINE" "$BASH_RC" 2&gt;/dev/null || echo "$PATH_LINE" &gt;&gt; "$BASH_RC"
+  # SSH login shells read .bash_profile, not .bashrc. Ensure it sources .bashrc
+  # so the PATH addition is effective in new SSH sessions.
+  BASH_PROFILE="/root/.bash_profile"
+  if [ -f "$BASH_PROFILE" ]; then
+    grep -Fxq '[ -f ~/.bashrc ] &amp;&amp; . ~/.bashrc' "$BASH_PROFILE" 2&gt;/dev/null || \
+      printf '\n# Source .bashrc for SSH login shells (claude-code)\n[ -f ~/.bashrc ] &amp;&amp; . ~/.bashrc\n' &gt;&gt; "$BASH_PROFILE"
+  fi
   log "Claude Code ready."
 }
 
