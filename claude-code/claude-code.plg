@@ -33,7 +33,11 @@
 - Fix: uninstall removes stale go lines and the user-scope config link.
 - Fix: SSH sessions didn't see `claude` command. .bash_profile (the login-shell
   startup file) never sourced .bashrc, so the PATH addition was invisible to SSH.
-  rc.claude-code now ensures .bash_profile sources .bashrc.
+  rc.claude-code now ensures .bash_profile sources .bashrc at the TOP of the file
+  (before PS1 is set — /etc/profile sets a plain PS1 that would overwrite the
+  colored prompt otherwise). Also removes the pre-existing
+  `source /root/.bash_profile` from .bashrc (Unraid default) to prevent an
+  infinite recursion that would hang the SSH login prompt.
 - Fix: .bashrc PATH guard used `.local/bin` regex — "." matches any char, so it
   misfired on /usr/local/bin in the default PATH, causing 18 duplicate lines.
   Now uses a precise fixed-string match (grep -Fxq).
@@ -116,9 +120,21 @@ start() {
   # so the PATH addition is effective in new SSH sessions.
   BASH_PROFILE="/root/.bash_profile"
   if [ -f "$BASH_PROFILE" ]; then
+    # Strip any existing claude-code source line (old location — we insert at top).
+    sed -i '/^# Source .bashrc for SSH login shells (claude-code)$/d; /^\[ -f ~\/.bashrc \] &amp;&amp; \. ~\/.bashrc$/d' "$BASH_PROFILE" 2&gt;/dev/null
+    # Insert at line 1 so .bashrc (and /etc/profile) runs BEFORE .bash_profile
+    # sets its colored PS1. Otherwise /etc/profile's plain PS1 overwrites it.
     grep -Fxq '[ -f ~/.bashrc ] &amp;&amp; . ~/.bashrc' "$BASH_PROFILE" 2&gt;/dev/null || \
-      printf '\n# Source .bashrc for SSH login shells (claude-code)\n[ -f ~/.bashrc ] &amp;&amp; . ~/.bashrc\n' &gt;&gt; "$BASH_PROFILE"
+      sed -i '1i\
+# Source .bashrc for SSH login shells (claude-code)\
+[ -f ~/.bashrc ] &amp;&amp; . ~/.bashrc\
+' "$BASH_PROFILE"
   fi
+  # The Unraid default .bashrc contains `source /root/.bash_profile`. Now that
+  # .bash_profile sources .bashrc, that line creates an infinite recursion that
+  # hangs SSH login shells. Remove it.
+  grep -Fqx 'source /root/.bash_profile' "$BASH_RC" 2&gt;/dev/null &amp;&amp; \
+    sed -i '/^source \/root\/\.bash_profile$/d' "$BASH_RC"
   log "Claude Code ready."
 }
 
