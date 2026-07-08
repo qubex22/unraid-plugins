@@ -3,7 +3,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "claude-code">
 <!ENTITY author    "community">
-<!ENTITY version   "2025.06.30.2">
+<!ENTITY version   "2025.06.30.3">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/qubex22/unraid-plugins/refs/heads/main/claude-code/claude-code.plg">
 <!ENTITY pkgURL    "https://raw.githubusercontent.com/qubex22/unraid-plugins/refs/heads/main/claude-code">
 <!ENTITY plgPATH   "/boot/config/plugins/&name;">
@@ -15,6 +15,23 @@
 
 <CHANGES>
 ###&version;
+- Fix: install actually persisted the binary. The official installer places a
+  SYMLINK at ~/.local/bin/claude (-&gt; ~/.local/share/claude/versions/&lt;ver&gt;); the
+  old `cp -a` copied that symlink then `rm -rf`'d its target, so the persisted
+  launcher pointed at a deleted ramdisk path -> "Not installed" on every boot.
+  Now resolves the real ELF binary, copies it into persist/share/versions/, and
+  points persist/bin/claude at it via a RELATIVE symlink (survives reboot).
+- Fix: rc.claude-code used `-f` (follows symlinks) for the installed check,
+  which was false for a broken link -> false "Not installed" log. Now uses a
+  tolerant -e/-L check and ln -sfn for idempotent restore.
+- Fix: persist ~/.claude.json (user-scope config) across reboots too.
+- Fix: /boot/config/go hook. The grep guard matched comment text, so the actual
+  `rc.claude-code start` command was never appended (only comment lines piled
+  up). Now strips stale claude lines and writes a single clean hook.
+- Add: update-claude.sh now shipped by the .plg (was orphaned) and re-persists
+  the new version after `claude update`/installer fallback.
+- Fix: uninstall removes stale go lines and the user-scope config link.
+###2025.06.30.2
 - Fix: Added CSRF token validation to prevent "missing csrf_token" errors
 - Fix: Updated all AJAX calls in ClaudeCode.page to include csrf_token
 - Fix: Smart CSRF validation in action.php (exempts progress/get_log for compatibility)
@@ -51,23 +68,37 @@ PERSIST="&plgPATH;/persist"
 LOCAL_BIN="/root/.local/bin"
 LOCAL_SHARE="/root/.local/share/claude"
 CLAUDE_CFG="/root/.claude"
+USER_JSON="/root/.claude.json"
 
 log() { logger -t "claude-code" "$*"; }
 
 start() {
-  [ ! -f "$PERSIST/bin/claude" ] &amp;&amp; log "Not installed. Use Settings/ClaudeCode to install." &amp;&amp; return 0
+  # Tolerant check: a real file OR a (possibly broken) symlink both count as
+  # "installed". Only bail when nothing exists at all. This is what stops the
+  # false "Not installed" log during install.
+  if [ ! -e "$PERSIST/bin/claude" ] &amp;&amp; [ ! -L "$PERSIST/bin/claude" ]; then
+    log "Not installed. Use Settings/ClaudeCode to install."
+    return 0
+  fi
   log "Restoring symlinks from $PERSIST..."
-  mkdir -p "$LOCAL_BIN" "/root/.local/share"
+  mkdir -p "$LOCAL_BIN" "$(dirname "$LOCAL_SHARE")"
 
-  # Fix symlinks by removing them first if they exist
-  rm -f "$LOCAL_BIN/claude" "$LOCAL_SHARE"
+  # Make the launcher executable (PERSIST/bin/claude is a symlink to the real
+  # binary; -x follows the link so this marks the underlying ELF executable).
+  chmod +x "$PERSIST/bin/claude" 2&gt;/dev/null
 
-  ln -sf "$PERSIST/bin/claude" "$LOCAL_BIN/claude"
-  ln -sf "$PERSIST/share" "$LOCAL_SHARE"
-
-  chmod +x "$PERSIST/bin/claude"
-  if [ -d "$PERSIST/cfg" ] &amp;&amp; [ ! -L "$CLAUDE_CFG" ]; then
-    rm -rf "$CLAUDE_CFG"; ln -sf "$PERSIST/cfg" "$CLAUDE_CFG"
+  # Point the live paths at /boot. ln -sfn replaces an existing link/dir entry
+  # in place without dereferencing it.
+  ln -sfn "$PERSIST/bin/claude" "$LOCAL_BIN/claude"
+  if [ -d "$PERSIST/share" ]; then
+    rm -rf "$LOCAL_SHARE"; ln -sfn "$PERSIST/share" "$LOCAL_SHARE"
+  fi
+  if [ -d "$PERSIST/cfg" ]; then
+    rm -rf "$CLAUDE_CFG"; ln -sfn "$PERSIST/cfg" "$CLAUDE_CFG"
+  fi
+  # Restore user-scope config link if we have a persisted copy.
+  if [ -f "$PERSIST/cfg/.claude.json" ]; then
+    rm -f "$USER_JSON"; ln -sfn "$PERSIST/cfg/.claude.json" "$USER_JSON"
   fi
   grep -q ".local/bin" /root/.bashrc 2&gt;/dev/null || echo 'export PATH="$HOME/.local/bin:$PATH"' &gt;&gt; /root/.bashrc
   log "Claude Code ready."
@@ -78,6 +109,7 @@ stop() {
   [ -L "$LOCAL_BIN/claude" ] &amp;&amp; rm -f "$LOCAL_BIN/claude"
   [ -L "$LOCAL_SHARE" ]      &amp;&amp; rm -f "$LOCAL_SHARE"
   [ -L "$CLAUDE_CFG" ]       &amp;&amp; rm -f "$CLAUDE_CFG"
+  [ -L "$USER_JSON" ]        &amp;&amp; rm -f "$USER_JSON"
 }
 
 case "$1" in
@@ -97,14 +129,18 @@ PERSIST="&plgPATH;/persist"
 LOCAL_BIN="/root/.local/bin"
 LOCAL_SHARE="/root/.local/share/claude"
 CLAUDE_CFG="/root/.claude"
+USER_JSON="/root/.claude.json"
 
 log() { logger -t "claude-code" "$*"; echo "[claude-code] $*"; }
 die() { log "ERROR: $*"; exit 1; }
 
-[ -f "$PERSIST/bin/claude" ] &amp;&amp; log "Already installed." &amp;&amp; exit 0
+# Already installed AND the persisted launcher actually resolves to a runnable file.
+if [ -e "$PERSIST/bin/claude" ] &amp;&amp; [ -x "$PERSIST/bin/claude" ]; then
+  log "Already installed."; exit 0
+fi
 
 log "Creating persistent directories on /boot..."
-mkdir -p "$PERSIST/bin" "$PERSIST/share" "$PERSIST/cfg" || die "mkdir persist failed"
+mkdir -p "$PERSIST/bin" "$PERSIST/share/versions" "$PERSIST/cfg" || die "mkdir persist failed"
 mkdir -p "$LOCAL_BIN" "/root/.local/share" || die "mkdir local failed"
 
 log "Downloading Claude Code via official installer..."
@@ -112,15 +148,39 @@ export PATH="/root/.local/bin:$PATH"
 if ! curl -fsSL https://claude.ai/install.sh | bash; then
   die "Official installer failed (curl exit $?). Check network / claude.ai reachability."
 fi
-[ -f "$LOCAL_BIN/claude" ] || die "Installer finished but $LOCAL_BIN/claude not found."
+# The official installer creates ~/.local/bin/claude as a SYMLINK to the real
+# binary at ~/.local/share/claude/versions/&lt;ver&gt;. Resolve it to the real file.
+[ -e "$LOCAL_BIN/claude" ] || die "Installer finished but $LOCAL_BIN/claude not found."
+REAL_BIN="$(readlink -f "$LOCAL_BIN/claude" 2&gt;/dev/null || true)"
+[ -n "$REAL_BIN" ] &amp;&amp; [ -f "$REAL_BIN" ] || die "Could not resolve real binary from $LOCAL_BIN/claude"
+VER="$(basename "$REAL_BIN")"
+[ -n "$VER" ] || die "Could not determine version from $REAL_BIN"
+log "Detected Claude Code version $VER at $REAL_BIN"
 
-log "Moving files to persistent storage on /boot..."
-cp -a "$LOCAL_BIN/claude" "$PERSIST/bin/claude" &amp;&amp; chmod +x "$PERSIST/bin/claude" || die "copying binary failed"
+log "Copying real binary to persistent storage on /boot..."
+# Copy the actual ELF binary (NOT the symlink) into the persistent share tree.
+cp -a "$REAL_BIN" "$PERSIST/share/versions/$VER" || die "copying binary failed"
+chmod +x "$PERSIST/share/versions/$VER"
+
+# Point PERSIST/bin/claude at the persisted binary via a RELATIVE symlink so it
+# stays valid no matter where /boot is mounted. (Absolute links into /root
+# break on reboot because /root is a ramdisk.)
+ln -sfn "../share/versions/$VER" "$PERSIST/bin/claude"
+# Sanity: the relative link must resolve to a real file from the bin/ dir.
+( cd "$PERSIST/bin" &amp;&amp; [ -e "./claude" ] ) || die "persisted bin symlink did not resolve"
+
+# Persist the runtime share dir (versions + any other installer-managed files),
+# then the config dir. Remove the ephemeral originals so rc.claude-code can
+# replace them with symlinks into /boot without clobbering real data.
 if [ -d "$LOCAL_SHARE" ] &amp;&amp; [ ! -L "$LOCAL_SHARE" ]; then
   cp -a "$LOCAL_SHARE/." "$PERSIST/share/" 2&gt;/dev/null; rm -rf "$LOCAL_SHARE"
 fi
 if [ -d "$CLAUDE_CFG" ] &amp;&amp; [ ! -L "$CLAUDE_CFG" ]; then
   cp -a "$CLAUDE_CFG/." "$PERSIST/cfg/" 2&gt;/dev/null; rm -rf "$CLAUDE_CFG"
+fi
+# Persist the user-scope config (~/.claude.json) if it exists and isn't already a link.
+if [ -f "$USER_JSON" ] &amp;&amp; [ ! -L "$USER_JSON" ]; then
+  cp -a "$USER_JSON" "$PERSIST/cfg/.claude.json" 2&gt;/dev/null; rm -f "$USER_JSON"
 fi
 
 bash "&plgPATH;/rc.claude-code" start || die "rc.claude-code start failed"
@@ -132,12 +192,65 @@ log "Install complete. Open a terminal and run: claude"
 <FILE Name="&plgPATH;/uninstall-claude.sh" Mode="0755">
 <INLINE>
 #!/bin/bash
+USER_JSON="/root/.claude.json"
 log() { logger -t "claude-code" "$*"; echo "[claude-code] $*"; }
 log "Stopping and removing Claude Code..."
 bash "&plgPATH;/rc.claude-code" stop
 rm -rf "&plgPATH;/persist"
-sed -i '/rc.claude-code/d' /boot/config/go 2&gt;/dev/null
+# Remove the persisted user-scope config link too.
+[ -L "$USER_JSON" ] &amp;&amp; rm -f "$USER_JSON"
+# Strip ALL claude-code lines from /boot/config/go (command + comment lines).
+sed -i '/claude-code/d; /Claude Code - restore symlinks/d' /boot/config/go 2&gt;/dev/null
 log "Claude Code removed."
+</INLINE>
+</FILE>
+
+<!-- Update script: upgrade Claude Code, then re-persist the new version -->
+<FILE Name="&plgPATH;/update-claude.sh" Mode="0755">
+<INLINE>
+#!/bin/bash
+set -o pipefail
+PERSIST="&plgPATH;/persist"
+LOCAL_BIN="/root/.local/bin"
+LOCAL_SHARE="/root/.local/share/claude"
+
+log() { logger -t "claude-code" "$*"; echo "[claude-code] $*"; }
+die() { log "ERROR: $*"; exit 1; }
+
+export PATH="/root/.local/bin:$PATH"
+
+# Try the in-place updater first (it swaps the versioned binary + relinks the
+# launcher, all within ~/.local/share/claude). Fall back to the official
+# installer if the update command is missing or fails.
+if command -v claude &gt;/dev/null 2&gt;&amp;1; then
+  log "Running: claude update"
+  claude update 2&gt;&amp;1 || log "claude update failed (exit $?) - trying installer"
+fi
+if [ ! -x "$LOCAL_BIN/claude" ] &amp;&amp; [ ! -e "$LOCAL_SHARE/versions" ]; then
+  log "Falling back to official installer..."
+  curl -fsSL https://claude.ai/install.sh | bash || die "Installer failed"
+fi
+
+[ -e "$LOCAL_BIN/claude" ] || die "No claude launcher found after update."
+REAL_BIN="$(readlink -f "$LOCAL_BIN/claude" 2&gt;/dev/null || true)"
+[ -n "$REAL_BIN" ] &amp;&amp; [ -f "$REAL_BIN" ] || die "Could not resolve real binary from $LOCAL_BIN/claude"
+VER="$(basename "$REAL_BIN")"
+log "New version: $VER"
+
+# Re-persist the (possibly new) versioned binary + share tree, then point the
+# launcher at it with a relative symlink. Old versions are left in place so a
+# rollback is possible; prune them manually if /boot fills up.
+mkdir -p "$PERSIST/share/versions" "$PERSIST/bin"
+cp -a "$REAL_BIN" "$PERSIST/share/versions/$VER" || die "copying binary failed"
+chmod +x "$PERSIST/share/versions/$VER"
+if [ -d "$LOCAL_SHARE" ] &amp;&amp; [ ! -L "$LOCAL_SHARE" ]; then
+  cp -a "$LOCAL_SHARE/." "$PERSIST/share/" 2&gt;/dev/null
+fi
+ln -sfn "../share/versions/$VER" "$PERSIST/bin/claude"
+( cd "$PERSIST/bin" &amp;&amp; [ -e "./claude" ] ) || die "persisted bin symlink did not resolve"
+
+bash "&plgPATH;/rc.claude-code" start || die "rc.claude-code start failed"
+log "Update complete. Active version: $VER"
 </INLINE>
 </FILE>
 
@@ -155,11 +268,17 @@ fi
 upgradepkg --install-new "&plgPATH;/&plgNAME;.txz"
 
 GO="/boot/config/go"
-grep -q "rc.claude-code" "$GO" 2&gt;/dev/null || {
-  echo "" &gt;&gt; "$GO"
-  echo "# Claude Code - restore symlinks on boot" &gt;&gt; "$GO"
-  echo "bash /boot/config/plugins/claude-code/rc.claude-code start" &gt;&gt; "$GO"
-}
+# Idempotent boot hook: strip any prior claude-code lines (comment + command),
+# then append exactly one clean hook. Avoids the old bug where stale comment
+# lines accumulated but the command line never landed.
+if [ -f "$GO" ]; then
+  sed -i '/claude-code/d; /Claude Code - restore symlinks/d' "$GO" 2&gt;/dev/null
+  {
+    echo ""
+    echo "# Claude Code - restore symlinks on boot"
+    echo "bash /boot/config/plugins/claude-code/rc.claude-code start"
+  } &gt;&gt; "$GO"
+fi
 
 bash "&plgPATH;/rc.claude-code" start
 echo ""
@@ -177,7 +296,7 @@ bash &amp;plgPATH;/uninstall-claude.sh
 removepkg &amp;plgPATH;/&amp;plgNAME;.txz 2&gt;/dev/null
 rm -rf &amp;emhttp;
 rm -f &amp;plgPATH;/&amp;plgNAME;.txz &amp;plgPATH;/&amp;plgNAME;.md5
-rm -f &amp;plgPATH;/rc.claude-code &amp;plgPATH;/install-claude.sh &amp;plgPATH;/uninstall-claude.sh
+rm -f &amp;plgPATH;/rc.claude-code &amp;plgPATH;/install-claude.sh &amp;plgPATH;/uninstall-claude.sh &amp;plgPATH;/update-claude.sh
 echo "claude-code: removed."
 </INLINE>
 </FILE>

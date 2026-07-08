@@ -183,20 +183,24 @@ try {
             // Resolve the script + args for this action.
             if ($name === 'update') {
                 $script = "$bootDir/update-claude.sh";
-                $updateBody = "#!/bin/bash\n" .
-                    "set -o pipefail\n" .
-                    "export PATH=/root/.local/bin:\$PATH\n" .
-                    "echo 'Running: claude update'\n" .
-                    "claude update 2>&1\n" .
-                    "RC=\$?\n" .
-                    "if [ \$RC -ne 0 ]; then\n" .
-                    "  echo \"claude update failed (exit \$RC) — falling back to installer...\"\n" .
-                    "  curl -fsSL https://claude.ai/install.sh | bash || { echo 'Installer failed'; exit 1; }\n" .
-                    "fi\n";
-                if (file_put_contents($script, $updateBody) === false) {
-                    cc_fail("Could not write update script: $script");
+                // The plugin ships update-claude.sh via the .plg. Only write a
+                // minimal fallback inline if it is somehow missing.
+                if (!is_file($script)) {
+                    $updateBody = "#!/bin/bash\n" .
+                        "set -o pipefail\n" .
+                        "export PATH=/root/.local/bin:\$PATH\n" .
+                        "echo 'Running: claude update'\n" .
+                        "claude update 2>&1\n" .
+                        "RC=\$?\n" .
+                        "if [ \$RC -ne 0 ]; then\n" .
+                        "  echo \"claude update failed (exit \$RC) - falling back to installer...\"\n" .
+                        "  curl -fsSL https://claude.ai/install.sh | bash || { echo 'Installer failed'; exit 1; }\n" .
+                        "fi\n";
+                    if (file_put_contents($script, $updateBody) === false) {
+                        cc_fail("Could not write update script: $script");
+                    }
+                    chmod($script, 0755);
                 }
-                chmod($script, 0755);
                 $args = '';
             } else {
                 $map = [
