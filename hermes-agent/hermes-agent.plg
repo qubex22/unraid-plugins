@@ -1,0 +1,224 @@
+<?xml version='1.0' standalone='yes'?>
+
+<!DOCTYPE PLUGIN [
+<!ENTITY name      "hermes-agent">
+<!ENTITY author    "community">
+<!ENTITY version   "0.19.1">
+<!ENTITY pluginURL "https://raw.githubusercontent.com/qubex22/unraid-plugins/refs/heads/main/hermes-agent/hermes-agent.plg">
+<!ENTITY plgPATH   "/boot/config/plugins/&name;">
+<!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
+]>
+
+<PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" min="6.10.0" support="https://forums.unraid.net">
+
+<CHANGES>
+###&version;
+- Initial release: persistent Hermes Agent v0.19.1 (Nous Research AI agent).
+- The full install lives in &plgPATH;/persist and survives reboots.
+- Self-contained: ships rc.hermes-agent (boot restore) + install/uninstall scripts.
+- POST-INSTALL auto-runs the official installer if the persist dir is missing.
+</CHANGES>
+
+<!-- Boot-time symlink restore script -->
+<FILE Name="&plgPATH;/rc.hermes-agent" Mode="0755">
+<INLINE>
+#!/bin/bash
+# rc.hermes-agent — boot-time restore for persistent Hermes Agent on Unraid.
+# Modeled on the claude-code plugin pattern: /boot persists, /root &amp; /usr/local
+# are ramdisk (wiped on reboot). This script re-links the live paths to the
+# persisted copies on /boot.
+#
+# Persisted layout (all under /boot/config/plugins/hermes-agent/persist/):
+#   lib/hermes-agent   -&gt; /usr/local/lib/hermes-agent   (repo + venv)
+#   bin/hermes*        -&gt; /usr/local/bin/hermes*        (launchers)
+#   uv/                -&gt; /usr/local/share/uv           (uv + managed pythons)
+#   hermes-home/       -&gt; /root/.hermes                 (config, skills, state)
+
+PERSIST="/boot/config/plugins/hermes-agent/persist"
+LIB="/usr/local/lib"
+BIN="/usr/local/bin"
+SHARE="/usr/local/share"
+HERMES_HOME="/root/.hermes"
+
+log() { logger -t "hermes-agent" "$*"; }
+
+start() {
+  if [ ! -d "$PERSIST/lib/hermes-agent" ]; then
+    log "Not installed. Run install-hermes.sh first."
+    return 0
+  fi
+  log "Restoring symlinks from $PERSIST..."
+  mkdir -p "$LIB" "$BIN" "$SHARE" "/root"
+
+  # Repo + venv. rm -rf the (ephemeral) dir, then link the persisted copy.
+  if [ -d "$PERSIST/lib/hermes-agent" ]; then
+    rm -rf "$LIB/hermes-agent"
+    ln -sfn "$PERSIST/lib/hermes-agent" "$LIB/hermes-agent"
+  fi
+  # uv + managed Python interpreters (venv interpreter path lives here).
+  if [ -d "$PERSIST/uv" ]; then
+    rm -rf "$SHARE/uv"
+    ln -sfn "$PERSIST/uv" "$SHARE/uv"
+  fi
+  # Launchers (/usr/local/bin is already on PATH on Unraid).
+  for f in hermes hermes-agent hermes-acp; do
+    if [ -f "$PERSIST/bin/$f" ]; then
+      rm -f "$BIN/$f"
+      ln -sfn "$PERSIST/bin/$f" "$BIN/$f"
+    fi
+  done
+  # Data dir (config.yaml, .env, skills, state.db, sessions, logs, node).
+  if [ -d "$PERSIST/hermes-home" ]; then
+    rm -rf "$HERMES_HOME"
+    ln -sfn "$PERSIST/hermes-home" "$HERMES_HOME"
+  fi
+  log "Hermes Agent ready."
+}
+
+stop() {
+  log "Removing symlinks..."
+  rm -f "$BIN/hermes" "$BIN/hermes-agent" "$BIN/hermes-acp"
+  [ -L "$LIB/hermes-agent" ] &amp;&amp; rm -f "$LIB/hermes-agent"
+  [ -L "$SHARE/uv" ]         &amp;&amp; rm -f "$SHARE/uv"
+  [ -L "$HERMES_HOME" ]      &amp;&amp; rm -f "$HERMES_HOME"
+}
+
+case "$1" in
+  start) start ;;
+  stop)  stop  ;;
+  *) echo "Usage: $0 {start|stop}" ;;
+esac
+</INLINE>
+</FILE>
+
+<!-- One-time install script (official installer + persist to /boot) -->
+<FILE Name="&plgPATH;/install-hermes.sh" Mode="0755">
+<INLINE>
+#!/bin/bash
+# install-hermes.sh — one-time persistent install of Hermes Agent on Unraid.
+# Modeled on the claude-code plugin: run the official installer into the
+# ramdisk defaults, copy everything to /boot, then symlink the live paths back
+# (rc.hermes-agent re-does the symlinks at every boot via /boot/config/go).
+set -o pipefail
+
+PERSIST="/boot/config/plugins/hermes-agent/persist"
+LIB="/usr/local/lib"
+BIN="/usr/local/bin"
+SHARE="/usr/local/share"
+HERMES_HOME="/root/.hermes"
+PLUGIN_DIR="/boot/config/plugins/hermes-agent"
+
+log() { logger -t "hermes-agent" "$*"; echo "[hermes-agent] $*"; }
+die() { log "ERROR: $*"; exit 1; }
+
+# Already persisted and the venv interpreter resolves?
+if [ -x "$PERSIST/lib/hermes-agent/venv/bin/python" ]; then
+  log "Already installed."
+  bash "$PLUGIN_DIR/rc.hermes-agent" start
+  exit 0
+fi
+
+log "Running official Hermes installer (non-interactive, browser skipped)..."
+if ! curl -fsSL https://hermes-agent.nousresearch.com/install.sh | \
+     bash -s -- --non-interactive --skip-browser; then
+  die "Official installer failed (exit $?). Check network / hermes-agent.nousresearch.com reachability."
+fi
+[ -x "$BIN/hermes" ]     || die "Installer finished but $BIN/hermes not found."
+[ -d "$LIB/hermes-agent" ] || die "Installer finished but $LIB/hermes-agent not found."
+
+log "Copying install to persistent storage on /boot..."
+mkdir -p "$PERSIST/lib" "$PERSIST/bin" "$PERSIST/uv" "$PERSIST/hermes-home"
+
+cp -a "$LIB/hermes-agent/." "$PERSIST/lib/hermes-agent/" || die "copying hermes-agent failed"
+for f in hermes hermes-agent hermes-acp; do
+  [ -f "$BIN/$f" ] &amp;&amp; cp -a "$BIN/$f" "$PERSIST/bin/"
+done
+if [ -d "$SHARE/uv" ]; then
+  cp -a "$SHARE/uv/." "$PERSIST/uv/" || die "copying uv failed"
+else
+  die "uv dir $SHARE/uv missing after install"
+fi
+cp -a "$HERMES_HOME/." "$PERSIST/hermes-home/" || die "copying hermes-home failed"
+
+log "Removing ephemeral originals (rc.hermes-agent links them back)..."
+rm -rf "$LIB/hermes-agent" "$SHARE/uv" "$HERMES_HOME"
+rm -f "$BIN/hermes" "$BIN/hermes-agent" "$BIN/hermes-acp"
+
+bash "$PLUGIN_DIR/rc.hermes-agent" start || die "rc.hermes-agent start failed"
+
+# Idempotent boot hook in /boot/config/go.
+GO="/boot/config/go"
+if [ -f "$GO" ]; then
+  sed -i '/hermes-agent/d; /Hermes Agent - restore symlinks/d' "$GO" 2&gt;/dev/null
+  {
+    echo ""
+    echo "# Hermes Agent - restore symlinks on boot"
+    echo "bash $PLUGIN_DIR/rc.hermes-agent start"
+  } &gt;&gt; "$GO"
+fi
+
+log "Install complete. Open a terminal and run: hermes"
+</INLINE>
+</FILE>
+
+<!-- Uninstall script -->
+<FILE Name="&plgPATH;/uninstall-hermes.sh" Mode="0755">
+<INLINE>
+#!/bin/bash
+# uninstall-hermes.sh — remove Hermes Agent and all persistent data from /boot.
+PLUGIN_DIR="/boot/config/plugins/hermes-agent"
+PERSIST="$PLUGIN_DIR/persist"
+
+log() { logger -t "hermes-agent" "$*"; echo "[hermes-agent] $*"; }
+
+log "Stopping and removing Hermes Agent..."
+bash "$PLUGIN_DIR/rc.hermes-agent" stop
+rm -rf "$PERSIST"
+# Strip the boot hook lines from /boot/config/go.
+sed -i '/hermes-agent/d; /Hermes Agent - restore symlinks/d' /boot/config/go 2&gt;/dev/null
+log "Hermes Agent removed."
+</INLINE>
+</FILE>
+
+<!-- POST-INSTALL (also runs on every boot re-install): restore symlinks,
+     register with the Plugins tab, maintain the /boot/config/go hook. -->
+<FILE Run="/bin/bash">
+<INLINE>
+PERSIST="&plgPATH;/persist"
+
+# Fresh install: run the one-time installer (idempotent - checks persist first).
+if [ ! -d "$PERSIST/lib/hermes-agent" ]; then
+  echo "hermes-agent: persist dir missing - running installer (this can take a few minutes)..."
+  bash "&plgPATH;/install-hermes.sh" || { echo "hermes-agent: installer failed - see syslog"; exit 1; }
+fi
+
+bash "&plgPATH;/rc.hermes-agent" start
+
+# Register with the Plugins tab: the manager only lists .plg files that are
+# symlinks in /var/log/plugins/ (ShowPlugins.php readlink check).
+ln -sfn "/boot/config/plugins/hermes-agent.plg" "/var/log/plugins/hermes-agent.plg"
+
+# Idempotent boot hook.
+GO="/boot/config/go"
+if [ -f "$GO" ]; then
+  sed -i '/hermes-agent/d; /Hermes Agent - restore symlinks/d' "$GO" 2>/dev/null
+  {
+    echo ""
+    echo "# Hermes Agent - restore symlinks on boot"
+    echo "bash &plgPATH;/rc.hermes-agent start"
+  } >> "$GO"
+fi
+echo "hermes-agent: ready."
+</INLINE>
+</FILE>
+
+<!-- REMOVE -->
+<FILE Run="/bin/bash" Method="remove">
+<INLINE>
+bash "&plgPATH;/uninstall-hermes.sh"
+rm -rf &emhttp;
+echo "hermes-agent: removed."
+</INLINE>
+</FILE>
+
+</PLUGIN>
