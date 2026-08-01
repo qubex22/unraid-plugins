@@ -8,6 +8,10 @@ open-source AI agent) for Unraid, modeled on the `claude-code` plugin in this re
 - `rc.hermes-agent` re-creates the symlinks at boot (via the `/boot/config/go` hook).
 - POST-INSTALL auto-runs the official installer the first time (takes a few minutes),
   so installing the plugin is all you need to do.
+- WebGUI page under **Settings → Utilities → Hermes Agent**: live status (version,
+  model, provider, base URL, sessions), config.yaml editor (api_key values masked
+  and preserved on save), environment overview, action log, and one-click
+  install / restore / update / uninstall with live progress.
 
 ## Install
 

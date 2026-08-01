@@ -3,21 +3,38 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "hermes-agent">
 <!ENTITY author    "community">
-<!ENTITY version   "0.19.1">
+<!ENTITY version   "0.19.2">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/qubex22/unraid-plugins/refs/heads/main/hermes-agent/hermes-agent.plg">
+<!ENTITY pkgURL    "https://raw.githubusercontent.com/qubex22/unraid-plugins/refs/heads/main/hermes-agent">
 <!ENTITY plgPATH   "/boot/config/plugins/&name;">
+<!ENTITY plgNAME   "&name;-&version;-x86_64-1">
 <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
 ]>
 
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" min="6.10.0" support="https://forums.unraid.net">
 
 <CHANGES>
-###&version;
+###0.19.2
+- Add: WebGUI page under Settings -&gt; Utilities (status, config.yaml editor with
+  masked secrets, environment overview, action log + live progress for
+  install/restore/update/uninstall).
+- Add: update-hermes.sh (runs 'hermes update' in place on /boot, then restores symlinks).
+- Add: WebGUI package (txz) verified by checksum and installed via upgradepkg.
+###0.19.1
 - Initial release: persistent Hermes Agent v0.19.1 (Nous Research AI agent).
 - The full install lives in &plgPATH;/persist and survives reboots.
 - Self-contained: ships rc.hermes-agent (boot restore) + install/uninstall scripts.
 - POST-INSTALL auto-runs the official installer if the persist dir is missing.
 </CHANGES>
+
+<!-- Download WebGUI package -->
+<FILE Name="&plgPATH;/&plgNAME;.txz">
+<URL>&pkgURL;/&plgNAME;.txz</URL>
+</FILE>
+
+<FILE Name="&plgPATH;/&plgNAME;.md5">
+<URL>&pkgURL;/&plgNAME;.md5</URL>
+</FILE>
 
 <!-- Boot-time symlink restore script -->
 <FILE Name="&plgPATH;/rc.hermes-agent" Mode="0755">
@@ -161,6 +178,28 @@ log "Install complete. Open a terminal and run: hermes"
 </INLINE>
 </FILE>
 
+<!-- Update script -->
+<FILE Name="&plgPATH;/update-hermes.sh" Mode="0755">
+<INLINE>
+#!/bin/bash
+# update-hermes.sh — update Hermes Agent in place, then re-restore symlinks.
+set -o pipefail
+
+log() { logger -t "hermes-agent" "$*"; echo "[hermes-agent] $*"; }
+die() { log "ERROR: $*"; exit 1; }
+
+export PATH="/usr/local/bin:/usr/local/sbin:/usr/sbin:/sbin:/usr/bin:/bin"
+
+command -v hermes &gt;/dev/null 2&gt;&amp;1 || die "hermes not found - restore symlinks first (rc.hermes-agent start)"
+
+log "Running: hermes update"
+hermes update 2&gt;&amp;1 || die "hermes update failed (exit $?)"
+
+bash /boot/config/plugins/hermes-agent/rc.hermes-agent start || die "rc.hermes-agent start failed"
+log "Update complete."
+</INLINE>
+</FILE>
+
 <!-- Uninstall script -->
 <FILE Name="&plgPATH;/uninstall-hermes.sh" Mode="0755">
 <INLINE>
@@ -180,10 +219,20 @@ log "Hermes Agent removed."
 </INLINE>
 </FILE>
 
-<!-- POST-INSTALL (also runs on every boot re-install): restore symlinks,
-     register with the Plugins tab, maintain the /boot/config/go hook. -->
+<!-- POST-INSTALL (also runs on every boot re-install): verify package, install
+     WebGUI, restore symlinks, register with Plugins tab, maintain go hook. -->
 <FILE Run="/bin/bash">
 <INLINE>
+SUM1=$(md5sum "&plgPATH;/&plgNAME;.txz" | awk '{print $1}')
+SUM2=$(cat "&plgPATH;/&plgNAME;.md5" | awk '{print $1}')
+if [ "$SUM1" != "$SUM2" ]; then
+  echo "ERROR: Package checksum mismatch - aborting"
+  rm -f "&plgPATH;/&plgNAME;.txz" "&plgPATH;/&plgNAME;.md5"
+  exit 1
+fi
+
+upgradepkg --install-new "&plgPATH;/&plgNAME;.txz"
+
 PERSIST="&plgPATH;/persist"
 
 # Fresh install: run the one-time installer (idempotent - checks persist first).
@@ -208,7 +257,11 @@ if [ -f "$GO" ]; then
     echo "bash &plgPATH;/rc.hermes-agent start"
   } >> "$GO"
 fi
-echo "hermes-agent: ready."
+echo ""
+echo "-----------------------------------------------------------"
+echo " hermes-agent plugin installed successfully."
+echo " Go to Settings -&gt; Utilities -&gt; Hermes Agent."
+echo "-----------------------------------------------------------"
 </INLINE>
 </FILE>
 
@@ -216,7 +269,9 @@ echo "hermes-agent: ready."
 <FILE Run="/bin/bash" Method="remove">
 <INLINE>
 bash "&plgPATH;/uninstall-hermes.sh"
+removepkg "&plgPATH;/&plgNAME;.txz" 2>/dev/null
 rm -rf &emhttp;
+rm -f "&plgPATH;/&plgNAME;.txz" "&plgPATH;/&plgNAME;.md5"
 echo "hermes-agent: removed."
 </INLINE>
 </FILE>
