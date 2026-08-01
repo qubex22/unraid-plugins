@@ -3,7 +3,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "hermes-agent">
 <!ENTITY author    "community">
-<!ENTITY version   "0.19.2">
+<!ENTITY version   "0.19.3">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/qubex22/unraid-plugins/refs/heads/main/hermes-agent/hermes-agent.plg">
 <!ENTITY pkgURL    "https://raw.githubusercontent.com/qubex22/unraid-plugins/refs/heads/main/hermes-agent">
 <!ENTITY plgPATH   "/boot/config/plugins/&name;">
@@ -14,6 +14,9 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" min="6.10.0" support="https://forums.unraid.net">
 
 <CHANGES>
+###0.19.3
+- Fix: mask nested api_key values (any indentation) in config editor; never leak secrets.
+- Fix: YAML validation now fails closed on parse errors (exit-code based).
 ###0.19.2
 - Add: WebGUI page under Settings -&gt; Utilities (status, config.yaml editor with
   masked secrets, environment overview, action log + live progress for
